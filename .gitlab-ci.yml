@@ -8,7 +8,7 @@ variablles:
    IMAGE_NAME: 'mini-projet-gitlab'
    IMAGE_TAG: 'v1'
    DOCKER_USERNAME: 'ulricjsteve'*
-   DOCKER_PASSWORD:
+   #DOCKER_PASSWORD:
    HOST_PORT: 80
    CONTAINER_PORT: 80
    SERVER_USERNAME: 'ubuntu'
@@ -46,7 +46,9 @@ Test:
 
 .release_image: &release_image
  stage: release
-   - docker login -u $DOCKER_USERNAME 
+ scripts:
+   # - docker login -u $DOCKER_USERNAME -p  DOCKER_PASSWORD
+   - echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin 
    - docker load -i mini-projet-gitlab.tar
    - docker tag $IMAGE_NAME:$IMAGE_TAG $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
    - docker push $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
@@ -57,7 +59,48 @@ Release Image:
    services:
      - name: docker:dind
        alias: docker
-  <<: *release_image
+   <<: *release_image
+
+.deploy_app: &deploy_app 
+  stage: deploy
+  before_script:
+    - apk add --no-cache openssh
+    - eval $(ssh-agent -s)
+    - echo "SSH_PRIVATE_KEY" | base64 -d > /tmp/id_rsa
+    - chmod 600 /tmp/id_rsa
+    - ssh-add /tmp/_id_rsa
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\h\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+  script:
+    - ssh -o StrictHostKeyChecking=no -i /tmp/id_rsa $SERVER_USERNAME@SERVER_IP "docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
+    - ssh -o StrictHostKeyChecking=no -i /tmp/id_rsa $SERVER_USERNAME@SERVER_IP "docker run --rm -dp $HOST_POR:$CONTAINER_PORT --name $IMAGE_NAME $IMAGE_NAME:$IMAGE_TAG"  
+
+Deploy Review:
+  stage: deploy
+  image: alpine
+  variables:
+    SERVER_IP: '44.223.70.29'
+  <<: *deploy_app
+  environment:
+    name: Review
 
 
+Deploy Staging:
+  stage: deploy
+  image: alpine
+  variables:
+    SERVER_IP: '18.212.207.96'
+  <<: *deploy_app
+  environment:
+    name: Staging
+
+Deploy Production:
+  stage: deploy
+  image: alpine
+  variables:
+    SERVER_IP: '50.16.50.204'
+  <<: *deploy_app
+  environment:
+    name: Production
    
